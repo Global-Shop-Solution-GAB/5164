@@ -1,0 +1,73 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+
+'This project was created by FEQ for Cal Weld on 8/27/2018
+'This script will run off the pre-rendering hook on the Purchase Order screen to hide the Close PO without further receipts, 
+'and it will run off the pre-save hook to verify that the quantity received is not greater than the quantity in the order line.
+
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String)
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+F.Intrinsic.Control.Case(15020)
+	'Pre-populate hook
+	'Passed variable 000012 is teh Close with No Further Recepits checkbox, Passed variable 000237 is the label
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.000012, "HIDE", 1)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.000237, "HIDE", 1)
+	
+F.Intrinsic.Control.Case(15030)
+	'Pre-Save Hook
+	F.Intrinsic.Control.CallSub("CheckQuantity")
+
+F.Intrinsic.Control.CaseElse
+	F.Intrinsic.Control.End
+	
+F.Intrinsic.Control.EndSelect
+
+Function.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Concat("Project: GCG_4586_Machine_Dash.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+Function.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.CheckQuantity.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String)
+V.Local.sPO.Declare(String, "")
+V.Local.sLine.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+V.Local.sRet.Declare(String, "")
+V.Local.fQtyRec.Declare(Float, 0.0)
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+'Passed variable 000002 is the PO number, and 000007 is the PO line, but it needs to be padded because the V_PO_LINES Table is special.
+F.Intrinsic.String.LPad(V.Passed.000002, "0", 7, V.Local.sPO)
+F.Intrinsic.String.Build("{0}0", V.Passed.000070, V.Local.sLine)
+F.Intrinsic.String.LPad(V.Local.sLine, "0", 4, V.Local.sLine)
+
+'We get the original quantity from the database
+F.Intrinsic.String.Build("Select QTY_ORDER from V_PO_LINES where PURCHASE_ORDER = '{0}' and RECORD_NO = '{1}'", V.Local.sPO, V.Local.sLine, V.Local.sSql)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sRet)
+F.Intrinsic.Control.If(V.Local.sRet.Trim, <>, "")
+	'They wanted to add the quantities being received into inventory, and into inspection
+	F.Intrinsic.Math.Add(V.Passed.000137.Float, V.Passed.000139.Float, V.Local.fQtyRec)
+	F.Intrinsic.Control.If(V.Local.sRet.Float, <, V.Local.fQtyRec)
+		F.Intrinsic.String.Build("Quantity Received cannot be greater than the Order Line Quantity.{0}{0}Saving Canceled.", V.Ambient.NewLine, V.Local.sSql)
+		F.Intrinsic.UI.Msgbox(V.Local.sSql, "QUANTITY CANNOT BE RECEIVED")
+		V.Passed.777777.Set(1)
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!conx.Close
+
+Function.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Concat("Project: GCG_4586_Machine_Dash.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+Function.Intrinsic.Control.EndTry
+Program.Sub.CheckQuantity.End
